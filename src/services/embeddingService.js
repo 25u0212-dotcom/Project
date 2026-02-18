@@ -5,7 +5,10 @@ const config = require('../config');
 const { EmbeddingError } = require('../utils/errors');
 const logger = require('../utils/logger');
 
-const client = new OpenAI({ apiKey: config.openai.apiKey });
+const client = new OpenAI({
+    apiKey: config.openRouter.apiKey,
+    baseURL: config.openRouter.baseURL,
+});
 
 /**
  * Build the text to embed for an idea.

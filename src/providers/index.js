@@ -2,43 +2,81 @@
 
 const config = require('../config');
 const { callOpenRouter } = require('./openrouter');
+const { callGrok, callGrokDeepening } = require('./grok');
+const { callGemini, callGeminiDeepening } = require('./gemini');
 const logger = require('../utils/logger');
 
 /**
- * Execute research prompt across multiple models in parallel.
- * Uses the models defined in config.openRouter.researchModels
+ * Execute research prompt across ALL providers (hybrid).
+ * Runs direct providers (Grok, Gemini) + OpenRouter models (DeepSeek, Claude, Perplexity) in parallel.
  * 
  * @param {string} systemPrompt
  * @param {string} userPrompt
  * @returns {Promise<Array<Object>>} Settled results (fulfilled/rejected)
  */
 async function executeAllProviders(systemPrompt, userPrompt) {
-    // We treat each MODEL as a "provider" in this context
-    const models = config.openRouter.researchModels;
+    const promises = [];
 
-    logger.info(`Executing research with models: ${models.join(', ')}`);
+    // 1. Direct Providers
+    logger.info('Executing direct providers: grok, gemini');
 
-    const promises = models.map((model) =>
-        callOpenRouter(model, systemPrompt, userPrompt, 'research')
-            .then((result) => ({ provider: model, status: 'fulfilled', result }))
+    promises.push(
+        callGrok(systemPrompt, userPrompt)
+            .then((result) => ({ provider: 'grok', status: 'fulfilled', result }))
             .catch((error) => {
-                logger.error(`Model ${model} failed`, { error: error.message, code: error.code });
-                return { provider: model, status: 'rejected', error };
+                logger.error('Provider grok failed', { error: error.message });
+                return { provider: 'grok', status: 'rejected', error };
             })
     );
+
+    promises.push(
+        callGemini(systemPrompt, userPrompt)
+            .then((result) => ({ provider: 'gemini', status: 'fulfilled', result }))
+            .catch((error) => {
+                logger.error('Provider gemini failed', { error: error.message });
+                return { provider: 'gemini', status: 'rejected', error };
+            })
+    );
+
+    // 2. OpenRouter Models
+    const openRouterModels = config.openRouter.researchModels;
+    logger.info(`Executing OpenRouter models: ${openRouterModels.join(', ')}`);
+
+    openRouterModels.forEach((model) => {
+        promises.push(
+            callOpenRouter(model, systemPrompt, userPrompt, 'research')
+                .then((result) => ({ provider: model, status: 'fulfilled', result }))
+                .catch((error) => {
+                    logger.error(`Model ${model} failed`, { error: error.message });
+                    return { provider: model, status: 'rejected', error };
+                })
+        );
+    });
 
     const settled = await Promise.allSettled(promises);
     return settled.map((s) => (s.status === 'fulfilled' ? s.value : s.reason));
 }
 
 /**
- * Execute deepening for a specific model.
- * @param {string} modelName - The OpenRouter model ID
+ * Execute deepening for a specific provider/model.
+ * Handles routing to direct providers vs OpenRouter.
+ * 
+ * @param {string} providerName - 'grok', 'gemini', or an OpenRouter model ID
  * @param {string} systemPrompt
  * @param {string} userPrompt
  */
-async function executeDeepeningProvider(modelName, systemPrompt, userPrompt) {
-    return callOpenRouter(modelName, systemPrompt, userPrompt, 'deepening');
+async function executeDeepeningProvider(providerName, systemPrompt, userPrompt) {
+    // Direct Routing
+    if (providerName === 'grok') {
+        return callGrokDeepening(systemPrompt, userPrompt);
+    }
+
+    if (providerName === 'gemini') {
+        return callGeminiDeepening(systemPrompt, userPrompt);
+    }
+
+    // Default to OpenRouter for everything else
+    return callOpenRouter(providerName, systemPrompt, userPrompt, 'deepening');
 }
 
 /**

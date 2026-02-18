@@ -4,6 +4,8 @@ require('dotenv').config();
 
 const requiredEnvVars = [
   'OPENROUTER_API_KEY',
+  'GROK_API_KEY',
+  'GEMINI_API_KEY',
   'DB_HOST',
   'DB_NAME',
   'DB_USER',
@@ -42,14 +44,33 @@ const config = {
     tls: process.env.REDIS_TLS === 'true' ? {} : undefined,
   },
 
-  // OpenRouter Configuration
+  // Direct Providers
+  grok: {
+    apiKey: process.env.GROK_API_KEY,
+    model: process.env.GROK_MODEL || 'grok-3-beta',
+    maxTokens: parseInt(process.env.GROK_MAX_TOKENS || '2000', 10),
+    timeoutMs: parseInt(process.env.GROK_TIMEOUT_MS || '60000', 10),
+  },
+
+  gemini: {
+    apiKey: process.env.GEMINI_API_KEY,
+    model: process.env.GEMINI_MODEL || 'gemini-1.5-pro',
+    maxTokens: parseInt(process.env.GEMINI_MAX_TOKENS || '2000', 10),
+    timeoutMs: parseInt(process.env.GEMINI_TIMEOUT_MS || '60000', 10),
+  },
+
+  // OpenRouter (DeepSeek, Perplexity, Anthropic)
   openRouter: {
     apiKey: process.env.OPENROUTER_API_KEY,
     baseURL: process.env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1',
-    defaultModel: process.env.DEFAULT_MODEL || 'deepseek/deepseek-chat',
     maxTokens: parseInt(process.env.LLM_MAX_TOKENS || '2000', 10),
     timeoutMs: parseInt(process.env.LLM_TIMEOUT_MS || '60000', 10),
-    // Models to use for the "Research" generation phase
+
+    // Default fallback
+    defaultModel: process.env.DEFAULT_MODEL || 'deepseek/deepseek-chat',
+
+    // Models to use for the main research phase via OpenRouter
+    // Note: 'grok' and 'gemini' are handled directly, so they are NOT in this list
     researchModels: [
       'deepseek/deepseek-chat',
       'anthropic/claude-3-opus',
